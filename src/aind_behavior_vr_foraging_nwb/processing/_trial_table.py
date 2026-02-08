@@ -9,9 +9,9 @@ import semver
 from contraqctor.contract.json import PydanticModel
 from pydantic import BaseModel
 
+from .._base import AbstractProcessor
 from ..models import Site
 from .helper import slice_by_index
-from ._base import AbstractProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -318,7 +318,7 @@ class TrialTableProcessor(AbstractProcessor):
                 reward_available=np.nan
                 if site_patch_state_at_reward.empty
                 else site_patch_state_at_reward.iloc[0]["Available"],
-                has_reward=np.isnan(reward_onset_time) == False,
+                has_reward=np.isnan(reward_onset_time) == False,  # noqa: E712
                 choice_cue_time=choice_time,
                 has_choice=not site_choice_feedback.empty,
                 reward_delay_duration=reward_onset_time - odor_onset_time,

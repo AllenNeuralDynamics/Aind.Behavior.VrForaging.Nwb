@@ -1,3 +1,3 @@
-from ._trial_table import TrialTableProcessor, DatasetProcessorError
+from ._trial_table import DatasetProcessorError, TrialTableProcessor
 
 __all__ = ["TrialTableProcessor", "DatasetProcessorError"]
