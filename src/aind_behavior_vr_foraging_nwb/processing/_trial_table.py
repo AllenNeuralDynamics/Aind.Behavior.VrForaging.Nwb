@@ -21,18 +21,13 @@ class DatasetProcessorError(Exception):
 
 
 class TrialTableProcessor(AbstractProcessor):
-    def __init__(self, dataset: contraqctor.contract.Dataset) -> None:
-        self._dataset = dataset
-        self._nwb_file: NdxEventsNWBFile | None = None
+    def __init__(self, dataset: contraqctor.contract.Dataset, *, raise_on_error: bool = False) -> None:
+        super().__init__(dataset, raise_on_error=raise_on_error)
 
         if self.dataset_version != self.parser_version:
             logger.warning(
                 "Dataset version %s does not match parser version %s", self.dataset_version, self.parser_version
             )
-
-    def with_nwb_file(self, nwb_file: NdxEventsNWBFile) -> "TrialTableProcessor":
-        self._nwb_file = nwb_file
-        return self
 
     @staticmethod
     def _parse_speaker_choice_feedback(dataset: contraqctor.contract.Dataset) -> pd.DataFrame:
@@ -122,21 +117,19 @@ class TrialTableProcessor(AbstractProcessor):
                 raise NotImplementedError("OdorSpecification processing not implemented for rig versions >= 0.7.0")
         return concentration
 
-    def process(self) -> NdxEventsNWBFile:
-        if self._nwb_file is None:
-            raise ValueError("NWB file must be set before processing trial table. Use with_nwb_file(...) to set it.")
-        else:
-            sites = self.process_to_sites()
-            for field_name, field in Site.model_fields.items():
-                if field_name in ["start_time", "stop_time"]:
-                    continue
-                self._nwb_file.add_trial_column(name=field_name, description=field.description)
+    def process(self, nwb_file: NdxEventsNWBFile) -> NdxEventsNWBFile:
+        sites = self.process_to_sites()
+        for field_name, field in Site.model_fields.items():
+            if field_name in ["start_time", "stop_time"]:
+                continue
+            nwb_file.add_trial_column(name=field_name, description=field.description)
 
-            for site in sites:
-                trial_data = site.model_dump()
-                # Replace None with np.nan
-                trial_data = {k: (np.nan if v is None else v) for k, v in trial_data.items()}
-                self._nwb_file.add_trial(**trial_data)
+        for site in sites:
+            trial_data = site.model_dump()
+            # Replace None with np.nan
+            trial_data = {k: (np.nan if v is None else v) for k, v in trial_data.items()}
+            nwb_file.add_trial(**trial_data)
+        return nwb_file
 
     def process_to_sites(self) -> list[Site]:
         """

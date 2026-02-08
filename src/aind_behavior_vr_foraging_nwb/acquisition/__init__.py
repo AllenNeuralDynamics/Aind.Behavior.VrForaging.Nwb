@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 
 import contraqctor.contract as data_contract
 import pynwb
@@ -12,19 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 class AcquisitionProcessor(AbstractProcessor):
-    def __init__(self, dataset: data_contract.Dataset) -> None:
-        self._dataset = dataset
-        self._nwb_file: Optional[NdxEventsNWBFile] = None
+    def __init__(self, dataset: data_contract.Dataset, *, raise_on_error: bool = False) -> None:
+        super().__init__(dataset, raise_on_error=raise_on_error)
 
-    def with_nwb_file(self, nwb_file: NdxEventsNWBFile) -> "AcquisitionProcessor":
-        self._nwb_file = nwb_file
-        return self
-
-    def process(self) -> NdxEventsNWBFile:
-        if self._nwb_file is None:
-            raise ValueError(
-                "NWB file must be set before processing acquisition data. Use with_nwb_file(...) to set it."
-            )
+    def process(self, nwb_file: NdxEventsNWBFile) -> NdxEventsNWBFile:
         _ = self._dataset.load_all(strict=False)
 
         for stream in self._dataset.iter_all():
@@ -48,16 +38,16 @@ class AcquisitionProcessor(AbstractProcessor):
                         table_description=stream.description,
                         df=stream.data.reset_index(),
                     )
-                    self._nwb_file.add_acquisition(dynamic_table)
+                    nwb_file.add_acquisition(dynamic_table)
                 elif isinstance(stream, (data_contract.json.SoftwareEvents)):
                     data = helper.clean_dataframe_for_nwb(stream.data.reset_index())
                     dynamic_table = pynwb.core.DynamicTable.from_dataframe(
                         name=name, table_description=stream.description, df=data
                     )
-                    self._nwb_file.add_acquisition(dynamic_table)
+                    nwb_file.add_acquisition(dynamic_table)
 
                 elif isinstance(stream, data_contract.json.PydanticModel):
-                    self._nwb_file.add_acquisition(
+                    nwb_file.add_acquisition(
                         pynwb.core.DynamicTable(
                             name=name,
                             description=stream.data.model_dump_json(),
@@ -71,4 +61,4 @@ class AcquisitionProcessor(AbstractProcessor):
                     raise
                 else:
                     logger.warning(f"Error processing stream {stream.name}: {e}")
-        return self._nwb_file
+        return nwb_file

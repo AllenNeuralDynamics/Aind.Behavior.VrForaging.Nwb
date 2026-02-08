@@ -4,11 +4,13 @@ import typing as ty
 import aind_behavior_vr_foraging
 import semver
 from contraqctor.contract import Dataset
+from ndx_events import NdxEventsNWBFile
 
 
 class AbstractProcessor(abc.ABC):
-    _raise_on_error: bool = False
-    _dataset: Dataset
+    def __init__(self, dataset: Dataset, *, raise_on_error: bool = False) -> None:
+        self._dataset = dataset
+        self._raise_on_error = raise_on_error
 
     @property
     def dataset(self) -> Dataset:
@@ -29,7 +31,7 @@ class AbstractProcessor(abc.ABC):
         return semver.Version.parse(value)
 
     @abc.abstractmethod
-    def process(self):
+    def process(self, nwb_file: NdxEventsNWBFile) -> NdxEventsNWBFile:
         raise NotImplementedError("Subclasses must implement the process method.")
 
     def with_raise_errors(self, raise_on_error: bool = True) -> ty.Self:

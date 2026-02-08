@@ -5,6 +5,7 @@ from typing import Optional
 
 import aind_behavior_vr_foraging.data_contract
 import contraqctor.contract as data_contract
+import semver
 from aind_data_schema.core.acquisition import Acquisition
 from aind_data_schema.core.data_description import DataDescription
 from aind_data_schema.core.instrument import Instrument
@@ -18,7 +19,7 @@ from .._base import AbstractProcessor
 logger = logging.getLogger(__name__)
 
 
-class NwbFileProcessor(AbstractProcessor):
+class NwbSession:
     def __init__(self, root_path: Path, *, dataset: Optional[data_contract.Dataset] = None) -> None:
         self._root_path = root_path
         self._dataset = dataset if dataset else aind_behavior_vr_foraging.data_contract.dataset(root_path)
@@ -28,6 +29,10 @@ class NwbFileProcessor(AbstractProcessor):
     @property
     def dataset(self) -> data_contract.Dataset:
         return self._dataset
+
+    @property
+    def dataset_version(self) -> semver.Version:
+        return semver.Version.parse(str(self._dataset.version))
 
     @property
     def aind_data_schema(self) -> "_AindDataSchemaJson":
@@ -47,6 +52,12 @@ class NwbFileProcessor(AbstractProcessor):
         if self._nwb_file is None:
             self._nwb_file = self._create_nwb_file()
         return self._nwb_file
+
+    def run(self, *processors: AbstractProcessor) -> NdxEventsNWBFile:
+        nwb = self.process()
+        for processor in processors:
+            nwb = processor.process(nwb)
+        return nwb
 
     def _get_aind_data_schema_json(self) -> "_AindDataSchemaJson":
         jsons = _AindDataSchemaJson.from_root_path(self.root_path)
