@@ -7,11 +7,11 @@ from aind_behavior_vr_foraging.data_contract import dataset
 from pynwb import NWBFile
 
 from aind_behavior_vr_foraging_nwb.models import Site
-from aind_behavior_vr_foraging_nwb.processing import DatasetProcessor
+from aind_behavior_vr_foraging_nwb.processing import TrialTableProcessor
 
 dataset_path = Path(r"\\allen\aind\stage\vr-foraging\data\828424\828424_2026-01-31T001737Z")
 ds = dataset(dataset_path)
-processed_sites = DatasetProcessor(ds).process()
+processed_sites = TrialTableProcessor(ds).process()
 
 
 # Create a new NWBFile. Most of these are already available via the aind-data-schema
