@@ -9,6 +9,7 @@ import semver
 from contraqctor.contract.json import PydanticModel
 from pydantic import BaseModel
 
+from .._base import AbstractProcessor
 from ..models import Site
 from .helper import slice_by_index
 
@@ -19,10 +20,9 @@ class DatasetProcessorError(Exception):
     pass
 
 
-class DatasetProcessor:
-    def __init__(self, dataset: contraqctor.contract.Dataset, *, raise_on_error: bool = True) -> None:
+class TrialTableProcessor(AbstractProcessor):
+    def __init__(self, dataset: contraqctor.contract.Dataset) -> None:
         self.dataset = dataset
-        self.raise_on_error = raise_on_error
 
         if self.dataset_version != self.parser_version:
             logger.warning(
@@ -108,13 +108,13 @@ class DatasetProcessor:
         d = dataset.at("Behavior").at("HarpTreadmill").at("BrakeCurrentSetPoint").load().data
         return d.loc[d["MessageType"] == "WRITE", "BrakeCurrentSetPoint"]
 
-    def get_olfactometer_channel_count(self, dataset: contraqctor.contract.Dataset) -> int:
+    def _get_olfactometer_channel_count(self, dataset: contraqctor.contract.Dataset) -> int:
         if self.dataset_version < semver.Version.parse("0.7.0"):
             return 3  # The channel 3 is always used as carrier, therefor only 3 odor channels are available.
         else:
             raise NotImplementedError("Olfactometer channel count parsing not implemented for rig versions < 0.7.0")
 
-    def process_odor_concentration(self, odor_specification: BaseModel | dict | None, n_channels: int) -> list[float]:
+    def _process_odor_concentration(self, odor_specification: BaseModel | dict | None, n_channels: int) -> list[float]:
         concentration = [0.0] * n_channels
         if odor_specification is None:
             return concentration
@@ -169,7 +169,7 @@ class DatasetProcessor:
         odor_onset = self._parse_odor_onset(dataset)
         patch_state_at_reward = self._parse_patch_state_at_reward(dataset)
         friction = self._parse_friction(dataset)
-        olfactometer_channel_count = self.get_olfactometer_channel_count(dataset)
+        olfactometer_channel_count = self._get_olfactometer_channel_count(dataset)
         wait_reward_outcome = self._parse_wait_reward_outcome(dataset)
 
         # Mutable state variables
@@ -298,7 +298,7 @@ class DatasetProcessor:
                 site_label=str(this_site["label"]),
                 friction=current_friction,
                 patch_label=str(this_patch["label"]),
-                odor_concentration=self.process_odor_concentration(
+                odor_concentration=self._process_odor_concentration(
                     this_patch["odor_specification"], olfactometer_channel_count
                 ),
                 patch_index=current_patch_idx,
@@ -318,7 +318,7 @@ class DatasetProcessor:
                 reward_available=np.nan
                 if site_patch_state_at_reward.empty
                 else site_patch_state_at_reward.iloc[0]["Available"],
-                has_reward=np.isnan(reward_onset_time) == False,
+                has_reward=np.isnan(reward_onset_time) == False,  # noqa: E712
                 choice_cue_time=choice_time,
                 has_choice=not site_choice_feedback.empty,
                 reward_delay_duration=reward_onset_time - odor_onset_time,
