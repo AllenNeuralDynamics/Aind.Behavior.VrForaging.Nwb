@@ -1,12 +1,12 @@
 import logging
 import typing as t
 
-import aind_behavior_vr_foraging
 import contraqctor
 import numpy as np
 import pandas as pd
 import semver
 from contraqctor.contract.json import PydanticModel
+from ndx_events import NdxEventsNWBFile
 from pydantic import BaseModel
 
 from .._base import AbstractProcessor
@@ -22,26 +22,17 @@ class DatasetProcessorError(Exception):
 
 class TrialTableProcessor(AbstractProcessor):
     def __init__(self, dataset: contraqctor.contract.Dataset) -> None:
-        self.dataset = dataset
+        self._dataset = dataset
+        self._nwb_file: NdxEventsNWBFile | None = None
 
         if self.dataset_version != self.parser_version:
             logger.warning(
                 "Dataset version %s does not match parser version %s", self.dataset_version, self.parser_version
             )
 
-    @property
-    def dataset_version(self) -> semver.Version:
-        return self._parse_version(self.dataset.version)
-
-    @property
-    def parser_version(self) -> semver.Version:
-        return semver.Version.parse(aind_behavior_vr_foraging.__semver__)
-
-    @staticmethod
-    def _parse_version(value: str | semver.Version) -> semver.Version:
-        if isinstance(value, semver.Version):
-            return value
-        return semver.Version.parse(value)
+    def with_nwb_file(self, nwb_file: NdxEventsNWBFile) -> "TrialTableProcessor":
+        self._nwb_file = nwb_file
+        return self
 
     @staticmethod
     def _parse_speaker_choice_feedback(dataset: contraqctor.contract.Dataset) -> pd.DataFrame:
@@ -131,7 +122,23 @@ class TrialTableProcessor(AbstractProcessor):
                 raise NotImplementedError("OdorSpecification processing not implemented for rig versions >= 0.7.0")
         return concentration
 
-    def process(self) -> list[Site]:
+    def process(self) -> NdxEventsNWBFile:
+        if self._nwb_file is None:
+            raise ValueError("NWB file must be set before processing trial table. Use with_nwb_file(...) to set it.")
+        else:
+            sites = self.process_to_sites()
+            for field_name, field in Site.model_fields.items():
+                if field_name in ["start_time", "stop_time"]:
+                    continue
+                self._nwb_file.add_trial_column(name=field_name, description=field.description)
+
+            for site in sites:
+                trial_data = site.model_dump()
+                # Replace None with np.nan
+                trial_data = {k: (np.nan if v is None else v) for k, v in trial_data.items()}
+                self._nwb_file.add_trial(**trial_data)
+
+    def process_to_sites(self) -> list[Site]:
         """
         Processes sites, patches, and blocks from the dataset and merges them.
         Returns a DataFrame with merged information.
