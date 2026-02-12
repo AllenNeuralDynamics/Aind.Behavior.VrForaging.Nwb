@@ -55,7 +55,9 @@ class NwbSession:
 
     def run(self, *processors: AbstractProcessor) -> NdxEventsNWBFile:
         nwb = self.process()
+        logging.info("Running %s processors on NWB file...", len(processors))
         for processor in processors:
+            logging.info("Running processor %s...", processor.__class__.__name__)
             nwb = processor.process(nwb)
         return nwb
 

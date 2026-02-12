@@ -2,12 +2,18 @@ from pathlib import Path
 
 from aind_behavior_vr_foraging_nwb.acquisition import AcquisitionProcessor
 from aind_behavior_vr_foraging_nwb.nwb_file import NwbSession
-from aind_behavior_vr_foraging_nwb.processing import TrialTableProcessor
+from aind_behavior_vr_foraging_nwb.processing import (
+    CreateProcessingModuleProcessor,
+    PositionAndVelocityProcessor,
+    TrialTableProcessor,
+)
 
 dataset_path = Path(r"\\allen\aind\stage\vr-foraging\data\828424\828424_2026-01-31T001737Z")
 session = NwbSession(root_path=dataset_path)
 session.run(
     AcquisitionProcessor(session.dataset),
+    CreateProcessingModuleProcessor(session.dataset),
+    PositionAndVelocityProcessor(session.dataset, sampling_rate_hz=100.0),
     TrialTableProcessor(session.dataset),
 )
 
