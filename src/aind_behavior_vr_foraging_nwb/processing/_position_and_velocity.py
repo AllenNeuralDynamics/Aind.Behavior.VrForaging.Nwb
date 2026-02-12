@@ -35,7 +35,6 @@ class PositionAndVelocityProcessor(AbstractProcessor):
             name="position",
             data=position_and_velocity["position"].values,
             unit="cm",
-            rate=self._sampling_rate_hz,
             timestamps=position_and_velocity.index.values,
         )
 
@@ -43,7 +42,6 @@ class PositionAndVelocityProcessor(AbstractProcessor):
             name="velocity",
             data=position_and_velocity["velocity"].values,
             unit="cm/s",
-            rate=self._sampling_rate_hz,
             timestamps=position_and_velocity.index.values,
         )
 

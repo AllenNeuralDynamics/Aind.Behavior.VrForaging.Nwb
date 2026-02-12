@@ -21,7 +21,7 @@ class AcquisitionProcessor(AbstractProcessor):
             if stream.is_collection:  # only process leaf nodes into nwb
                 err = stream.collect_errors()
                 if err:
-                    logger.warning(f"Collection stream {stream.name} has errors: {err}")
+                    logger.debug(f"Collection stream {stream.name} has errors: {err}")
                     if self.raise_on_error:
                         raise ValueError(f"Collection stream {stream.name} has errors: {err}")
                 continue
@@ -29,7 +29,7 @@ class AcquisitionProcessor(AbstractProcessor):
             name = stream.resolved_name.replace("::", ".")
             try:
                 if stream.has_error:
-                    logger.warning(f"Stream {stream.name} has error: {stream.collect_errors()}")
+                    logger.debug(f"Stream {stream.name} has error: {stream.collect_errors()}")
                     if self.raise_on_error:
                         raise ValueError(f"Stream {stream.name} has error: {stream.collect_errors()}")
                 if isinstance(stream, (data_contract.harp.HarpRegister, data_contract.csv.Csv)):
@@ -57,8 +57,8 @@ class AcquisitionProcessor(AbstractProcessor):
                     raise ValueError(f"Stream {stream.name} has unsupported type {type(stream)}, skipping.")
             except Exception as e:
                 if self.raise_on_error:
-                    logger.error(f"Error processing stream {stream.name}: {e}")
+                    logger.debug(f"Error processing stream {stream.name}: {e}")
                     raise
                 else:
-                    logger.warning(f"Error processing stream {stream.name}: {e}")
+                    logger.debug(f"Error processing stream {stream.name}: {e}")
         return nwb_file

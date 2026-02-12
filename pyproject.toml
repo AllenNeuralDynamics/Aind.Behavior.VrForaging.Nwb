@@ -31,7 +31,8 @@ dependencies = [
     "scipy",
     "pydantic-settings",
     "aind-nwb-utils",
-    "ndx-events"
+    "ndx-events",
+    "aind-data-access-api>=1.9.2",
 ]
 
 [project.urls]

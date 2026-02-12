@@ -62,7 +62,8 @@ class NwbSession:
         return nwb
 
     def _get_aind_data_schema_json(self) -> "_AindDataSchemaJson":
-        jsons = _AindDataSchemaJson.from_root_path(self.root_path)
+        jsons = _AindDataSchemaJson.from_doc_db(Path(self.root_path).name)
+        # jsons = _AindDataSchemaJson.from_root_path(self.root_path)
         logger.debug("Found primary data %s", jsons.data_description.name)
         return jsons
 
@@ -73,7 +74,7 @@ class NwbSession:
             session_start_time=self.aind_data_schema.acquisition.acquisition_start_time,
             identifier=self.aind_data_schema.data_description.subject_id,
             subject=get_subject_nwb_object(
-                self.aind_data_schema.data_description.model_dump(), self.aind_data_schema.subject.model_dump()
+                self.aind_data_schema.data_description.model_dump(mode="json"), self.aind_data_schema.subject.model_dump(mode="json")
             ),
         )
         return nwb_file
@@ -82,7 +83,7 @@ class NwbSession:
         if self._nwb_file is None:
             raise ValueError("NWB file has not been created yet. Call process() to create it before writing.")
 
-        with NWBZarrIO((output).as_posix(), "w") as io:
+        with NWBZarrIO(Path(output).as_posix(), "w") as io:
             io.write(self._nwb_file)
         logger.info(f"NWB zarr successfully written to path {output}")
 
@@ -115,4 +116,19 @@ class _AindDataSchemaJson:
             instrument=Instrument.model_validate_json(instrument_json_path[0].read_text()),
             subject=Subject.model_validate_json(subject_json_path[0].read_text()),
             data_description=DataDescription.model_validate_json(data_description_json_path[0].read_text()),
+        )
+
+    @classmethod
+    def from_doc_db(cls, session_id: str) -> "_AindDataSchemaJson":
+        from aind_data_access_api.document_db import MetadataDbClient
+
+        client = MetadataDbClient(host="api.allenneuraldynamics.org", version="v2")
+        records = client.fetch_records_by_filter_list(filter_key="name", filter_values=[session_id])
+        if len(records) == 0:
+            raise ValueError(f"No records found in document DB for session_id {session_id}")
+        return cls(
+            acquisition=Acquisition.model_validate(records[0]["acquisition"]),
+            instrument=Instrument.model_validate(records[0]["instrument"]),
+            subject=Subject.model_validate(records[0]["subject"]),
+            data_description=DataDescription.model_validate(records[0]["data_description"]),
         )

@@ -8,7 +8,7 @@ from aind_behavior_vr_foraging_nwb.processing import (
     TrialTableProcessor,
 )
 
-dataset_path = Path(r"\\allen\aind\stage\vr-foraging\data\828424\828424_2026-01-31T001737Z")
+dataset_path = Path(r"C:\Data\single-site-dataset\behavior_808728_2025-12-15_21-19-25")
 session = NwbSession(root_path=dataset_path)
 session.run(
     AcquisitionProcessor(session.dataset),
@@ -25,4 +25,4 @@ for patch_id in rewarded_sites["patch_label"].unique():
     p_reward = patch_data["has_reward"].sum() / len(patch_data)
     print(f"Patch {patch_id}: P(choice)={p_choice:.2f}, P(reward|choice)={p_reward:.2f}")
 
-session.write_nwb_zarr("output.nwb.zarr")
+session.write_nwb_zarr(".tmp/output.nwb.zarr")

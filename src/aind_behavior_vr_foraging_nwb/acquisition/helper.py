@@ -23,7 +23,7 @@ def clean_dataframe_for_nwb(data: pd.DataFrame) -> pd.DataFrame:
     """
     for column in data.columns:
         # convert to nwb allowable types
-        data[column].replace({None: np.nan}, inplace=True)
+        data[column] = data[column].replace({None: np.nan})
         data[column] = data[column].apply(lambda x: x.value if isinstance(x, Enum) else x)
         data[column] = data[column].apply(lambda x: json.dumps(x) if isinstance(x, dict) else x)
 

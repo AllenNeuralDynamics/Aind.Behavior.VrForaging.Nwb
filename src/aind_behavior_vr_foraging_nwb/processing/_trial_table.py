@@ -206,8 +206,7 @@ class TrialTableProcessor(AbstractProcessor):
             assert len(site_water_delivery) <= 1, "Multiple water deliveries in site interval"
 
             site_odor_onset = slice_by_index(odor_onset, this_timestamp, next_timestamp)
-            assert len(site_odor_onset) <= 1, "Multiple odor onsets in site interval"
-
+        
             this_friction = slice_by_index(friction, this_timestamp, next_timestamp)
             if not this_friction.empty:
                 current_friction = this_friction.values[-1]
@@ -260,6 +259,7 @@ class TrialTableProcessor(AbstractProcessor):
                     logger.warning("Odor onset found slightly (<2ms) before site interval, using site onset instead")
                     odor_onset_time = this_timestamp
             else:
+                # we always take the first odor onset in case animal goes in and out
                 odor_onset_time = site_odor_onset.index[0] if not site_odor_onset.empty else np.nan
 
             reward_metadata_sliced = slice_by_index(reward_metadata, this_timestamp, next_timestamp)
