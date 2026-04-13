@@ -74,7 +74,8 @@ class NwbSession:
             session_start_time=self.aind_data_schema.acquisition.acquisition_start_time,
             identifier=self.aind_data_schema.data_description.subject_id,
             subject=get_subject_nwb_object(
-                self.aind_data_schema.data_description.model_dump(mode="json"), self.aind_data_schema.subject.model_dump(mode="json")
+                self.aind_data_schema.data_description.model_dump(mode="json"),
+                self.aind_data_schema.subject.model_dump(mode="json"),
             ),
         )
         return nwb_file

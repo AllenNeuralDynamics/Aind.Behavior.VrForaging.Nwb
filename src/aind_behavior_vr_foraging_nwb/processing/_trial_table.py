@@ -206,7 +206,7 @@ class TrialTableProcessor(AbstractProcessor):
             assert len(site_water_delivery) <= 1, "Multiple water deliveries in site interval"
 
             site_odor_onset = slice_by_index(odor_onset, this_timestamp, next_timestamp)
-        
+
             this_friction = slice_by_index(friction, this_timestamp, next_timestamp)
             if not this_friction.empty:
                 current_friction = this_friction.values[-1]
@@ -321,7 +321,9 @@ class TrialTableProcessor(AbstractProcessor):
                 has_reward=np.isnan(reward_onset_time) == False,  # noqa: E712
                 choice_cue_time=choice_time,
                 has_choice=not site_choice_feedback.empty,
-                reward_delay_duration=reward_onset_time - odor_onset_time,
+                reward_delay_duration=reward_onset_time - choice_time
+                if reward_onset_time is not np.nan and choice_time is not None
+                else np.nan,
                 has_waited_reward_delay=has_waited_reward_delay,
                 block_index=this_block_idx,
             )
