@@ -174,8 +174,8 @@ class TrialTableProcessor(AbstractProcessor):
 
         # Mutable state variables
         current_friction = 0  # Keeps track of the last known friction. Sites with null friction will not update this.
-        current_block_idx = 0
-        current_patch_idx = 0
+        current_block_idx = -1  # Prevent the first block from being considered as a continuation of the previous block
+        current_patch_idx = -1  # Prevent the first patch from being considered as a continuation of a previous patch
         current_patch_in_block_idx = 0  # Resets when block changes
         current_site_in_patch_idx = 0  # Resets when patch changes
         current_site_in_block_idx = 0  # Resets when block changes
