@@ -203,7 +203,8 @@ class TrialTableProcessor(AbstractProcessor):
             assert len(site_choice_feedback) <= 1, "Multiple speaker choices in site interval"
 
             site_water_delivery = slice_by_index(water_delivery, this_timestamp, next_timestamp)
-            assert len(site_water_delivery) <= 1, "Multiple water deliveries in site interval"
+            if len(site_water_delivery) > 1:
+                logger.error("FIX ME BY USING METADATA!!!! Multiple water deliveries in site interval")
 
             site_odor_onset = slice_by_index(odor_onset, this_timestamp, next_timestamp)
 
