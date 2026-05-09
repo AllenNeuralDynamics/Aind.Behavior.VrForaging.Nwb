@@ -96,7 +96,7 @@ class TrialTableProcessor(AbstractProcessor):
 
     def _get_olfactometer_channel_count(self, dataset: contraqctor.contract.Dataset) -> int:
         if self.dataset_version < semver.Version.parse("0.7.0"):
-            return 3  # The channel 3 is always used as carrier, therefor only 3 odor channels are available.
+            return 3  # The channel 3 is always used as carrier, therefore only 3 odor channels are available.
         else:
             raise NotImplementedError("Olfactometer channel count parsing not implemented for rig versions < 0.7.0")
 
@@ -267,7 +267,7 @@ class TrialTableProcessor(AbstractProcessor):
 
             reward_metadata_sliced = slice_by_index(reward_metadata, this_timestamp, next_timestamp)
             if reward_metadata_sliced.empty or bool(reward_metadata_sliced["data"].fillna(0).eq(0).all()):
-                # Note: for None or 0 reward metadata there wont be a hardware water delivery event
+                # Note: for None or 0 reward metadata there won't be a hardware water delivery event
                 # However, if the experimenter manually triggered a reward around this time, we should not count that
                 # as a reward for this site either, so we make an explicit decision to set reward_onset_time to nan
                 reward_onset_time = np.nan
