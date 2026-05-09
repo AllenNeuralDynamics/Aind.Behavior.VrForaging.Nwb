@@ -63,5 +63,3 @@ class Site(BaseModel):
     patch_index_in_block_by_type: int = Field(
         description="Same as patch_in_block_index but only counting patches of the same label"
     )
-
-    block_index_by_type: int = Field(description="Block number only counting blocks of the same index")
