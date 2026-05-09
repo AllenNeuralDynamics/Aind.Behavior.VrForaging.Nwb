@@ -18,7 +18,7 @@ def get_closest_from_timestamp(
 
     Returns an array of indices from df.index.
     """
-    df_index = df.index.values
+    df_index = np.asarray(df.index.values)
 
     # Use numpy searchsorted for efficient lookup
     timestamps = np.asarray(timestamps)
@@ -49,4 +49,5 @@ def slice_by_index(df: _TSliceable, start_time: float, end_time: float) -> _TSli
     Subsets the DataFrame to only include rows within the specified range.
     Assumes the DataFrame index is a datetime-like index.
     """
-    return df[(df.index >= start_time) & (df.index < end_time)]
+    _df = t.cast(t.Any, df)
+    return _df[(df.index >= start_time) & (df.index < end_time)]

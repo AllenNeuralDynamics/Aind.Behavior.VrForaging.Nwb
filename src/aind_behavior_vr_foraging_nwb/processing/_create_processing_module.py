@@ -17,14 +17,15 @@ class CreateProcessingModuleProcessor(AbstractProcessor):
         super().__init__(*args, **kwargs)
 
     def process(self, nwb_file: NdxEventsNWBFile) -> NdxEventsNWBFile:
-        if self._MODULE_NAME in nwb_file.processing:
+        _nwb = ty.cast(ty.Any, nwb_file)
+        if self._MODULE_NAME in _nwb.processing:
             logger.warning(
                 "Processing module '%s' already exists in NWB file. Skipping.",
                 self._MODULE_NAME,
             )
             return nwb_file
         processing_module = ProcessingModule(name=self._MODULE_NAME, description=self._DESCRIPTION)
-        nwb_file.add_processing_module(processing_module)
+        _nwb.add_processing_module(processing_module)
         return nwb_file
 
     @classmethod

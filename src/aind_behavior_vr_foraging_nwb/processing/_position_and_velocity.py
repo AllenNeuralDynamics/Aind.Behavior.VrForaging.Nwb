@@ -21,7 +21,8 @@ class PositionAndVelocityProcessor(AbstractProcessor):
         self._sampling_rate_hz = sampling_rate_hz
 
     def process(self, nwb_file: NdxEventsNWBFile) -> NdxEventsNWBFile:
-        processing_module = nwb_file.processing.get(CreateProcessingModuleProcessor.module_name())
+        _nwb = ty.cast(ty.Any, nwb_file)
+        processing_module = _nwb.processing.get(CreateProcessingModuleProcessor.module_name())
         if processing_module is None:
             raise ValueError(
                 f"Processing module '{CreateProcessingModuleProcessor.module_name()}' not found in NWB file. Please run '{CreateProcessingModuleProcessor.__name__}' processor first to create the processing module."

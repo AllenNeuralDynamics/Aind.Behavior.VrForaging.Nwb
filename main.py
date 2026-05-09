@@ -25,4 +25,4 @@ for patch_id in rewarded_sites["patch_label"].unique():
     p_reward = patch_data["has_reward"].sum() / len(patch_data)
     print(f"Patch {patch_id}: P(choice)={p_choice:.2f}, P(reward|choice)={p_reward:.2f}")
 
-session.write_nwb_zarr(".tmp/output.nwb.zarr")
+session.write_nwb_zarr(Path(".tmp/output.nwb.zarr"))

@@ -81,7 +81,7 @@ class TrialTableProcessor(AbstractProcessor):
     @staticmethod
     def _as_dict(d: contraqctor.contract.DataStream | PydanticModel | BaseModel | dict) -> dict:
         if isinstance(d, (PydanticModel, contraqctor.contract.DataStream)):
-            d = d.data
+            d = t.cast(BaseModel | dict, d.data)
         if isinstance(d, dict):
             return d
         if isinstance(d, BaseModel):
@@ -96,7 +96,7 @@ class TrialTableProcessor(AbstractProcessor):
 
     def _get_olfactometer_channel_count(self, dataset: contraqctor.contract.Dataset) -> int:
         if self.dataset_version < semver.Version.parse("0.7.0"):
-            return 3  # The channel 3 is always used as carrier, therefor only 3 odor channels are available.
+            return 3  # The channel 3 is always used as carrier, therefore only 3 odor channels are available.
         else:
             raise NotImplementedError("Olfactometer channel count parsing not implemented for rig versions < 0.7.0")
 
@@ -172,19 +172,40 @@ class TrialTableProcessor(AbstractProcessor):
         olfactometer_channel_count = self._get_olfactometer_channel_count(dataset)
         wait_reward_outcome = self._parse_wait_reward_outcome(dataset)
 
-        # Mutable state variables
-        current_friction = 0  # Keeps track of the last known friction. Sites with null friction will not update this.
-        current_block_idx = -1  # Prevent the first block from being considered as a continuation of the previous block
-        current_patch_idx = -1  # Prevent the first patch from being considered as a continuation of a previous patch
-        current_patch_in_block_idx = 0  # Resets when block changes
-        current_site_in_patch_idx = 0  # Resets when patch changes
-        current_site_in_block_idx = 0  # Resets when block changes
-        unique_site_labels = merged["data"].apply(lambda d: d["label"]).unique().tolist()
-        site_by_type_in_patch_counter = dict.fromkeys(
-            unique_site_labels, 0
-        )  # initialize to 0, which means we subtract 1 later for 0-based indexing
+        # Precompute all trial indices
+        merged["site_label"] = merged["data"].apply(lambda d: d["label"])
+        merged["patch_label"] = merged["patch_data"].apply(lambda d: d["label"])
 
-        ##
+        # Site-level indices
+        merged["_site_index_in_patch"] = merged.groupby("patch_count").cumcount()
+        merged["_site_index_in_block"] = merged.groupby("block_count").cumcount()
+        merged["_site_index_by_type"] = merged.groupby("site_label").cumcount()
+        merged["_site_index_in_patch_by_type"] = merged.groupby(["patch_count", "site_label"]).cumcount()
+        merged["_site_index_in_block_by_type"] = merged.groupby(["block_count", "site_label"]).cumcount()
+
+        # Patch-level indices (computed on patches, then mapped back to sites via patch_count)
+        patches_with_blocks = pd.merge_asof(
+            patches.sort_index(),
+            blocks[["block_count"]].sort_index(),
+            left_index=True,
+            right_index=True,
+            direction="backward",
+        )
+        patches_with_blocks["patch_label"] = patches_with_blocks["data"].apply(lambda d: d["label"])
+        patches_with_blocks["_patch_index_in_block"] = patches_with_blocks.groupby("block_count").cumcount()
+        patches_with_blocks["_patch_index_by_type"] = patches_with_blocks.groupby("patch_label").cumcount()
+        patches_with_blocks["_patch_index_in_block_by_type"] = patches_with_blocks.groupby(
+            ["block_count", "patch_label"]
+        ).cumcount()
+        merged = merged.join(
+            patches_with_blocks.set_index("patch_count")[
+                ["_patch_index_in_block", "_patch_index_by_type", "_patch_index_in_block_by_type"]
+            ],
+            on="patch_count",
+        )
+
+        # Only mutable states that requires trial-based
+        current_friction = 0  # Keeps track of the last known friction. Sites with null friction will not update this.
 
         sites: list[Site] = []
         # We reject the last site because it may not have completed and would require custom logic to handle
@@ -193,8 +214,8 @@ class TrialTableProcessor(AbstractProcessor):
             # Note this may not always be true depending on system jitter, but it is generally a safe assumption.
             # If you find edge cases where this is not true, submit an issue so we can investigate and improve the parser.
 
-            this_timestamp = merged.index[i]
-            next_timestamp = merged.index[i + 1]
+            this_timestamp = t.cast(float, merged.index[i])
+            next_timestamp = t.cast(float, merged.index[i + 1])
 
             this_site = merged.iloc[i]["data"]
             this_patch = merged.iloc[i]["patch_data"]
@@ -219,30 +240,11 @@ class TrialTableProcessor(AbstractProcessor):
             assert len(site_patch_state_at_reward) <= 1, "Multiple patch states at reward in site interval"
 
             ##
-            this_block_idx = merged.iloc[i]["block_count"]
-            this_patch_idx = merged.iloc[i]["patch_count"]
+            row = merged.iloc[i]
 
-            # We always increment these eagerly
-            current_site_in_patch_idx += 1
-            current_site_in_block_idx += 1
-
-            # If the patch changed, we reset the site_in_patch counter and increment the patch_in_block counter
-            if this_patch_idx != current_patch_idx:
-                current_patch_idx = this_patch_idx
-                current_site_in_patch_idx = 0
-                current_patch_in_block_idx += 1
-                site_by_type_in_patch_counter = dict.fromkeys(unique_site_labels, 0)
-
-            # If the blocked changed, we reset both the patch_in_block and site_in_block counters
-            # We dont need to re-reset current_patch_idx because patches are unique across blocks
-            if this_block_idx != current_block_idx:
-                current_block_idx = this_block_idx
-                current_patch_in_block_idx = 0
-                current_site_in_block_idx = 0
-
-            site_by_type_in_patch_counter[this_site["label"]] += 1
-
-            choice_time = site_choice_feedback.index[0] if not site_choice_feedback.empty else np.nan
+            choice_time: float = (
+                t.cast(float, site_choice_feedback.index[0]) if not site_choice_feedback.empty else np.nan
+            )
 
             if site_odor_onset.empty and this_site["odor_specification"] is not None:
                 # Sometimes the timestamp for the odor onset arrives slightly before the site. We should investigate
@@ -261,11 +263,11 @@ class TrialTableProcessor(AbstractProcessor):
                     odor_onset_time = this_timestamp
             else:
                 # we always take the first odor onset in case animal goes in and out
-                odor_onset_time = site_odor_onset.index[0] if not site_odor_onset.empty else np.nan
+                odor_onset_time = t.cast(float, site_odor_onset.index[0]) if not site_odor_onset.empty else np.nan
 
             reward_metadata_sliced = slice_by_index(reward_metadata, this_timestamp, next_timestamp)
-            if reward_metadata_sliced.empty or reward_metadata_sliced["data"].fillna(0).eq(0).all():
-                # Note: for None or 0 reward metadata there wont be a hardware water delivery event
+            if reward_metadata_sliced.empty or bool(reward_metadata_sliced["data"].fillna(0).eq(0).all()):
+                # Note: for None or 0 reward metadata there won't be a hardware water delivery event
                 # However, if the experimenter manually triggered a reward around this time, we should not count that
                 # as a reward for this site either, so we make an explicit decision to set reward_onset_time to nan
                 reward_onset_time = np.nan
@@ -280,9 +282,11 @@ class TrialTableProcessor(AbstractProcessor):
                         reward_onset_time = np.nan
                 elif len(reward_metadata_sliced) > 1:
                     logger.warning("Multiple reward metadata entries in site interval...Using first one")
-                    reward_onset_time = site_water_delivery.index[0]
+                    reward_onset_time = t.cast(float, site_water_delivery.index[0])
                 else:
-                    reward_onset_time = site_water_delivery.index[0] if not site_water_delivery.empty else np.nan
+                    reward_onset_time = (
+                        t.cast(float, site_water_delivery.index[0]) if not site_water_delivery.empty else np.nan
+                    )
 
             wait_reward_outcome_sliced = slice_by_index(wait_reward_outcome, this_timestamp, next_timestamp)
             has_waited_reward_delay = (
@@ -302,12 +306,16 @@ class TrialTableProcessor(AbstractProcessor):
                 odor_concentration=self._process_odor_concentration(
                     this_patch["odor_specification"], olfactometer_channel_count
                 ),
-                patch_index=current_patch_idx,
-                patch_in_block_index=current_patch_in_block_idx,
+                patch_index=row["patch_count"],
+                patch_index_in_block=row["_patch_index_in_block"],
+                patch_index_by_type=row["_patch_index_by_type"],
+                patch_index_in_block_by_type=row["_patch_index_in_block_by_type"],
                 site_index=i,
-                site_in_patch_index=current_site_in_patch_idx,
-                site_in_block_index=current_site_in_block_idx,
-                site_by_type_in_patch_index=site_by_type_in_patch_counter[this_site["label"]] - 1,  # zero indexed
+                site_index_in_patch=row["_site_index_in_patch"],
+                site_index_in_block=row["_site_index_in_block"],
+                site_index_by_type=row["_site_index_by_type"],
+                site_index_in_patch_by_type=row["_site_index_in_patch_by_type"],
+                site_index_in_block_by_type=row["_site_index_in_block_by_type"],
                 odor_onset_time=odor_onset_time,
                 reward_onset_time=reward_onset_time,
                 reward_amount=np.nan
@@ -326,7 +334,7 @@ class TrialTableProcessor(AbstractProcessor):
                 if reward_onset_time is not np.nan and choice_time is not None
                 else np.nan,
                 has_waited_reward_delay=has_waited_reward_delay,
-                block_index=this_block_idx,
+                block_index=row["block_count"],
             )
             sites.append(site)
         return sites
