@@ -180,9 +180,16 @@ class TrialTableProcessor(AbstractProcessor):
         current_site_in_patch_idx = 0  # Resets when patch changes
         current_site_in_block_idx = 0  # Resets when block changes
         unique_site_labels = merged["data"].apply(lambda d: d["label"]).unique().tolist()
+        unique_patch_labels = patches["data"].apply(lambda d: d["label"]).unique().tolist()
         site_by_type_in_patch_counter = dict.fromkeys(
             unique_site_labels, 0
         )  # initialize to 0, which means we subtract 1 later for 0-based indexing
+        site_by_type_in_block_counter: dict[str, int] = dict.fromkeys(unique_site_labels, 0)
+        site_by_type_global_counter: dict[str, int] = dict.fromkeys(unique_site_labels, 0)
+        patch_by_type_global_counter: dict[str, int] = dict.fromkeys(unique_patch_labels, 0)
+        patch_by_type_in_block_counter: dict[str, int] = dict.fromkeys(unique_patch_labels, 0)
+        block_by_type_global_counter: dict[int, int] = {}  # block_count -> cumulative index by type
+        current_block_by_type_idx: int = 0
 
         ##
 
@@ -226,21 +233,33 @@ class TrialTableProcessor(AbstractProcessor):
             current_site_in_patch_idx += 1
             current_site_in_block_idx += 1
 
+            this_patch_label = str(this_patch["label"])
+
             # If the patch changed, we reset the site_in_patch counter and increment the patch_in_block counter
             if this_patch_idx != current_patch_idx:
                 current_patch_idx = this_patch_idx
                 current_site_in_patch_idx = 0
                 current_patch_in_block_idx += 1
                 site_by_type_in_patch_counter = dict.fromkeys(unique_site_labels, 0)
+                # Increment patch-by-type counters
+                patch_by_type_global_counter[this_patch_label] += 1
+                patch_by_type_in_block_counter[this_patch_label] += 1
 
-            # If the blocked changed, we reset both the patch_in_block and site_in_block counters
+            # If the block changed, we reset both the patch_in_block and site_in_block counters
             # We dont need to re-reset current_patch_idx because patches are unique across blocks
             if this_block_idx != current_block_idx:
                 current_block_idx = this_block_idx
                 current_patch_in_block_idx = 0
                 current_site_in_block_idx = 0
+                site_by_type_in_block_counter = dict.fromkeys(unique_site_labels, 0)
+                patch_by_type_in_block_counter = dict.fromkeys(unique_patch_labels, 0)
+                # Increment block-by-type counter (blocks don't have a label, we use block_count as identity)
+                current_block_by_type_idx = block_by_type_global_counter.get(this_block_idx, 0)
+                block_by_type_global_counter[this_block_idx] = current_block_by_type_idx
 
             site_by_type_in_patch_counter[this_site["label"]] += 1
+            site_by_type_in_block_counter[this_site["label"]] += 1
+            site_by_type_global_counter[this_site["label"]] += 1
 
             choice_time = site_choice_feedback.index[0] if not site_choice_feedback.empty else np.nan
 
@@ -303,11 +322,15 @@ class TrialTableProcessor(AbstractProcessor):
                     this_patch["odor_specification"], olfactometer_channel_count
                 ),
                 patch_index=current_patch_idx,
-                patch_in_block_index=current_patch_in_block_idx,
+                patch_index_in_block=current_patch_in_block_idx,
+                patch_index_by_type=patch_by_type_global_counter[this_patch_label] - 1,  # zero indexed
+                patch_index_in_block_by_type=patch_by_type_in_block_counter[this_patch_label] - 1,  # zero indexed
                 site_index=i,
-                site_in_patch_index=current_site_in_patch_idx,
-                site_in_block_index=current_site_in_block_idx,
-                site_by_type_in_patch_index=site_by_type_in_patch_counter[this_site["label"]] - 1,  # zero indexed
+                site_index_in_patch=current_site_in_patch_idx,
+                site_index_in_block=current_site_in_block_idx,
+                site_index_by_type=site_by_type_global_counter[this_site["label"]] - 1,  # zero indexed
+                site_index_in_patch_by_type=site_by_type_in_patch_counter[this_site["label"]] - 1,  # zero indexed
+                site_index_in_block_by_type=site_by_type_in_block_counter[this_site["label"]] - 1,  # zero indexed
                 odor_onset_time=odor_onset_time,
                 reward_onset_time=reward_onset_time,
                 reward_amount=np.nan
@@ -327,6 +350,7 @@ class TrialTableProcessor(AbstractProcessor):
                 else np.nan,
                 has_waited_reward_delay=has_waited_reward_delay,
                 block_index=this_block_idx,
+                block_index_by_type=current_block_by_type_idx,
             )
             sites.append(site)
         return sites
