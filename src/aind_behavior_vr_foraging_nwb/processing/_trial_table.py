@@ -81,7 +81,7 @@ class TrialTableProcessor(AbstractProcessor):
     @staticmethod
     def _as_dict(d: contraqctor.contract.DataStream | PydanticModel | BaseModel | dict) -> dict:
         if isinstance(d, (PydanticModel, contraqctor.contract.DataStream)):
-            d = d.data
+            d = t.cast(BaseModel | dict, d.data)
         if isinstance(d, dict):
             return d
         if isinstance(d, BaseModel):
