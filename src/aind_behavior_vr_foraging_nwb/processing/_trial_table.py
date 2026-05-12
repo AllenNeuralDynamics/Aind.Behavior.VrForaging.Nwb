@@ -28,6 +28,13 @@ class TrialTableProcessor(AbstractProcessor):
             logger.warning(
                 "Dataset version %s does not match parser version %s", self.dataset_version, self.parser_version
             )
+        self.rig_configuration = self._ensure_json_not_pydantic(self.dataset["Behavior"]["InputSchemas"]["Rig"].load())
+
+    @staticmethod
+    def _ensure_json_not_pydantic(d: t.Any) -> dict:
+        if isinstance(d, BaseModel):
+            return d.model_dump()
+        return d
 
     @staticmethod
     def _parse_speaker_choice_feedback(dataset: contraqctor.contract.Dataset) -> pd.DataFrame:
@@ -95,27 +102,20 @@ class TrialTableProcessor(AbstractProcessor):
         return d.loc[d["MessageType"] == "WRITE", "BrakeCurrentSetPoint"]
 
     def _get_olfactometer_channel_count(self, dataset: contraqctor.contract.Dataset) -> int:
-        if self.dataset_version < semver.Version.parse("0.7.0"):
-            return 3  # The channel 3 is always used as carrier, therefore only 3 odor channels are available.
-        else:
-            raise NotImplementedError("Olfactometer channel count parsing not implemented for rig versions < 0.7.0")
+        extra_olfs = getattr(self.rig_configuration, "harp_olfactometer_extension", None)
+        n_extra_channels = 4 * len(extra_olfs) if extra_olfs is not None else 0
+        return (
+            3 + n_extra_channels
+        )  # The channel 3 is always used as carrier, therefore only 3 odor channels are available.
 
     def _process_odor_concentration(self, odor_specification: BaseModel | dict | None, n_channels: int) -> list[float]:
+        from aind_behavior_vr_foraging.task_logic import OdorMixture
+        from pydantic import TypeAdapter
         concentration = [0.0] * n_channels
         if odor_specification is None:
             return concentration
-        if isinstance(odor_specification, BaseModel):
-            odor_specification = odor_specification.model_dump()
-
-        match v := self.dataset_version:
-            case _ if v < semver.Version.parse("0.7.0"):
-                index = odor_specification.get("index")
-                if not isinstance(index, int):
-                    raise TypeError("odor_specification.index must be an int")
-                concentration[index] = odor_specification.get("concentration", 0.0)
-            case _:
-                raise NotImplementedError("OdorSpecification processing not implemented for rig versions >= 0.7.0")
-        return concentration
+        odor_specification = self._ensure_json_not_pydantic(odor_specification)
+        return TypeAdapter(OdorMixture).validate_python(odor_specification)
 
     def process(self, nwb_file: NdxEventsNWBFile) -> NdxEventsNWBFile:
         sites = self.process_to_sites()
