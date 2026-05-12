@@ -4,16 +4,20 @@ import typing as t
 import contraqctor
 import numpy as np
 import pandas as pd
-import semver
+from aind_behavior_vr_foraging.task_logic import OdorMixture
 from contraqctor.contract.json import PydanticModel
-from ndx_events import NdxEventsNWBFile
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from .._base import AbstractProcessor
 from ..models import Site
 from .helper import slice_by_index
 
 logger = logging.getLogger(__name__)
+
+if t.TYPE_CHECKING:
+    from aind_behavior_vr_foraging_nwb.nwb_file import NdxEventsNWBFile
+else:
+    NdxEventsNWBFile = t.Any
 
 
 class DatasetProcessorError(Exception):
@@ -109,8 +113,7 @@ class TrialTableProcessor(AbstractProcessor):
         )  # The channel 3 is always used as carrier, therefore only 3 odor channels are available.
 
     def _process_odor_concentration(self, odor_specification: BaseModel | dict | None, n_channels: int) -> list[float]:
-        from aind_behavior_vr_foraging.task_logic import OdorMixture
-        from pydantic import TypeAdapter
+
         concentration = [0.0] * n_channels
         if odor_specification is None:
             return concentration

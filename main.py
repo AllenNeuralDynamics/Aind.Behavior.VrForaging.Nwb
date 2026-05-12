@@ -1,15 +1,11 @@
 from pathlib import Path
 
 import pandas as pd
+from aind_behavior_vr_foraging.data_contract import dataset
 
-from aind_behavior_vr_foraging_nwb.acquisition import AcquisitionProcessor
-from aind_behavior_vr_foraging_nwb.nwb_file import NwbSession
 from aind_behavior_vr_foraging_nwb.processing import (
-    CreateProcessingModuleProcessor,
-    PositionAndVelocityProcessor,
     TrialTableProcessor,
 )
-from aind_behavior_vr_foraging.data_contract import dataset
 
 dataset_path = Path(r"C:\Users\bruno.cruz\Desktop\815103_2026-05-08T231548Z")
 ds = dataset(dataset_path)
