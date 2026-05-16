@@ -8,12 +8,14 @@ The suite is gated behind the ``integration`` marker so the default
 ``uv run pytest`` invocation is unaffected.
 """
 
+from urllib.parse import urlparse
+
 import pandas as pd
 import pytest
 
 from aind_behavior_vr_foraging_nwb.processing import TrialTableProcessor
 
-from .conftest import CACHE_ROOT, _manifest, download_dataset
+from .conftest import CACHE_ROOT, _manifest
 from .model import DatasetEntry
 
 pytestmark = pytest.mark.integration
@@ -73,7 +75,7 @@ def _assert_trials_table_invariants(sites_df: pd.DataFrame, entry: DatasetEntry)
 
 
 @pytest.mark.parametrize("entry", _entries, ids=_ids)
-def test_trials_table(entry, s3_client, request):
+def test_trials_table(entry, request):
     """Test the trial table processing logic using already downloaded datasets."""
     if entry.xfail:
         request.applymarker(
@@ -86,7 +88,8 @@ def test_trials_table(entry, s3_client, request):
     try:
         from aind_behavior_vr_foraging.data_contract import dataset
 
-        session_path = download_dataset(s3_client, entry, CACHE_ROOT)
+        parsed = urlparse(entry.uri)
+        session_path = CACHE_ROOT / parsed.netloc / parsed.path.strip("/")
 
         ds = dataset(session_path)
         processor = TrialTableProcessor(ds, raise_on_error=True)

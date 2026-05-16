@@ -49,6 +49,7 @@ dev = [
     'pytest-cov',
     'codespell',
     'ty',
+    'tqdm',
 ]
 
 [tool.uv]

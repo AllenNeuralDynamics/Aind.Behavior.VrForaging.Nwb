@@ -16,6 +16,7 @@ import pytest
 from botocore import UNSIGNED
 from botocore.client import BaseClient
 from botocore.config import Config
+from tqdm import tqdm
 
 from .model import DatasetEntry, DatasetManifest, load_manifest
 
@@ -53,6 +54,21 @@ def pytest_configure(config: pytest.Config) -> None:
 def s3_client() -> BaseClient:
     """Anonymous S3 client for accessing public buckets."""
     return boto3.client("s3", config=Config(signature_version=UNSIGNED))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_datasets_cached(s3_client: BaseClient) -> None:
+    """Download all manifest datasets to the local cache before any test runs.
+
+    This fixture runs once per session and is a no-op for datasets that are
+    already cached with a matching ETag. Tests should never call
+    ``download_dataset`` directly.
+    """
+    entries = _manifest.datasets
+    with tqdm(entries, desc="Datasets", unit="dataset", leave=True) as pbar:
+        for entry in pbar:
+            pbar.set_postfix_str(entry.id, refresh=True)
+            download_dataset(s3_client, entry, CACHE_ROOT)
 
 
 def _is_excluded(rel_key: str, patterns: list[str]) -> bool:
