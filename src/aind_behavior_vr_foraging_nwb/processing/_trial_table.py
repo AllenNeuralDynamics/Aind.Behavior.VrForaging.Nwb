@@ -5,15 +5,20 @@ import contraqctor
 import numpy as np
 import pandas as pd
 import semver
+from aind_behavior_vr_foraging.task_logic import OdorMixture
 from contraqctor.contract.json import PydanticModel
-from ndx_events import NdxEventsNWBFile
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 from .._base import AbstractProcessor
 from ..models import Site
 from .helper import slice_by_index
 
 logger = logging.getLogger(__name__)
+
+if t.TYPE_CHECKING:
+    from aind_behavior_vr_foraging_nwb.nwb_file import NdxEventsNWBFile
+else:
+    NdxEventsNWBFile = t.Any
 
 
 class DatasetProcessorError(Exception):
@@ -28,6 +33,13 @@ class TrialTableProcessor(AbstractProcessor):
             logger.warning(
                 "Dataset version %s does not match parser version %s", self.dataset_version, self.parser_version
             )
+        self.rig_configuration = self._ensure_json_not_pydantic(self.dataset["Behavior"]["InputSchemas"]["Rig"].load())
+
+    @staticmethod
+    def _ensure_json_not_pydantic(d: t.Any) -> dict:
+        if isinstance(d, BaseModel):
+            return d.model_dump()
+        return d
 
     @staticmethod
     def _parse_speaker_choice_feedback(dataset: contraqctor.contract.Dataset) -> pd.DataFrame:
@@ -58,8 +70,10 @@ class TrialTableProcessor(AbstractProcessor):
         patches_state = patches_state.join(expanded)
         return patches_state
 
-    @staticmethod
-    def _parse_patch_state_at_reward(dataset: contraqctor.contract.Dataset) -> pd.DataFrame:
+    def _parse_patch_state_at_reward(self, dataset: contraqctor.contract.Dataset) -> pd.DataFrame:
+        if self.dataset_version < semver.Version(major=0, minor=6, patch=0):
+            raise DatasetProcessorError("PatchStateAtReward is only available in dataset version 0.6.0 and above")
+        # TODO this is likely something we want to overload for 0.5.x to work.
         patches_state_at_reward = dataset.at("Behavior").at("SoftwareEvents").at("PatchStateAtReward").load().data
         expanded = pd.json_normalize(patches_state_at_reward["data"])
         expanded.index = patches_state_at_reward.index
@@ -95,27 +109,19 @@ class TrialTableProcessor(AbstractProcessor):
         return d.loc[d["MessageType"] == "WRITE", "BrakeCurrentSetPoint"]
 
     def _get_olfactometer_channel_count(self, dataset: contraqctor.contract.Dataset) -> int:
-        if self.dataset_version < semver.Version.parse("0.7.0"):
-            return 3  # The channel 3 is always used as carrier, therefore only 3 odor channels are available.
-        else:
-            raise NotImplementedError("Olfactometer channel count parsing not implemented for rig versions < 0.7.0")
+        extra_olfs = getattr(self.rig_configuration, "harp_olfactometer_extension", None)
+        n_extra_channels = 4 * len(extra_olfs) if extra_olfs is not None else 0
+        return (
+            3 + n_extra_channels
+        )  # The channel 3 is always used as carrier, therefore only 3 odor channels are available.
 
     def _process_odor_concentration(self, odor_specification: BaseModel | dict | None, n_channels: int) -> list[float]:
+
         concentration = [0.0] * n_channels
         if odor_specification is None:
             return concentration
-        if isinstance(odor_specification, BaseModel):
-            odor_specification = odor_specification.model_dump()
-
-        match v := self.dataset_version:
-            case _ if v < semver.Version.parse("0.7.0"):
-                index = odor_specification.get("index")
-                if not isinstance(index, int):
-                    raise TypeError("odor_specification.index must be an int")
-                concentration[index] = odor_specification.get("concentration", 0.0)
-            case _:
-                raise NotImplementedError("OdorSpecification processing not implemented for rig versions >= 0.7.0")
-        return concentration
+        odor_specification = self._ensure_json_not_pydantic(odor_specification)
+        return TypeAdapter(OdorMixture).validate_python(odor_specification)
 
     def process(self, nwb_file: NdxEventsNWBFile) -> NdxEventsNWBFile:
         sites = self.process_to_sites()
@@ -223,10 +229,6 @@ class TrialTableProcessor(AbstractProcessor):
             site_choice_feedback = slice_by_index(choice_feedback, this_timestamp, next_timestamp)
             assert len(site_choice_feedback) <= 1, "Multiple speaker choices in site interval"
 
-            site_water_delivery = slice_by_index(water_delivery, this_timestamp, next_timestamp)
-            if len(site_water_delivery) > 1:
-                logger.error("FIX ME BY USING METADATA!!!! Multiple water deliveries in site interval")
-
             site_odor_onset = slice_by_index(odor_onset, this_timestamp, next_timestamp)
 
             this_friction = slice_by_index(friction, this_timestamp, next_timestamp)
@@ -265,6 +267,7 @@ class TrialTableProcessor(AbstractProcessor):
                 # we always take the first odor onset in case animal goes in and out
                 odor_onset_time = t.cast(float, site_odor_onset.index[0]) if not site_odor_onset.empty else np.nan
 
+            site_water_delivery = slice_by_index(water_delivery, this_timestamp, next_timestamp)
             reward_metadata_sliced = slice_by_index(reward_metadata, this_timestamp, next_timestamp)
             if reward_metadata_sliced.empty or bool(reward_metadata_sliced["data"].fillna(0).eq(0).all()):
                 # Note: for None or 0 reward metadata there won't be a hardware water delivery event
@@ -278,11 +281,11 @@ class TrialTableProcessor(AbstractProcessor):
                             "Valid reward metadata found but no water delivery in site interval"
                         )
                     else:
-                        logger.warning("Valid reward metadata found but no water delivery in site interval")
+                        logger.error("Valid reward metadata found but no water delivery in site interval")
                         reward_onset_time = np.nan
                 elif len(reward_metadata_sliced) > 1:
-                    logger.warning("Multiple reward metadata entries in site interval...Using first one")
-                    reward_onset_time = t.cast(float, site_water_delivery.index[0])
+                    closest_index = site_water_delivery.index.get_indexer([this_timestamp], method="nearest")[0]
+                    reward_onset_time = t.cast(float, site_water_delivery.index[closest_index])
                 else:
                     reward_onset_time = (
                         t.cast(float, site_water_delivery.index[0]) if not site_water_delivery.empty else np.nan
